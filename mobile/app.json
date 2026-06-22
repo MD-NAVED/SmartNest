@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "SmartNest",
+    "slug": "smartnest-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.smartnest.app"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
