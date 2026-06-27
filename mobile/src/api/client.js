@@ -3,8 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-// Production Render API base URL
-let baseURL = 'https://smartnest-3jr4.onrender.com';
+// Toggle local development vs production Render API
+// Set to true to connect the app to the backend server running locally on your computer.
+const USE_LOCAL_BACKEND = true; 
+const LOCAL_PC_IP = '10.245.153.121'; // Your computer's network IP for phone/emulator connection
+
+let baseURL = USE_LOCAL_BACKEND
+  ? `http://${LOCAL_PC_IP}:8000`
+  : 'https://smartnest-3jr4.onrender.com';
 
 console.log(`[SmartNest API Client] Initialized. Base URL: ${baseURL}`);
 
