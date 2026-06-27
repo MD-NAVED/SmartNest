@@ -14,7 +14,7 @@ import { registerUnauthorizedHandler } from '../api/client';
 // Screens
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
-import HomeScreen from '../screens/HomeScreen';
+import DashboardScreen from '../screens/DashboardScreen';
 import AddDeviceScreen from '../screens/AddDeviceScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 
@@ -36,7 +36,7 @@ function HomeStackScreen() {
     >
       <HomeStack.Screen 
         name="DevicesHome" 
-        component={HomeScreen} 
+        component={DashboardScreen} 
         options={{ title: '4Layers' }} 
       />
       <HomeStack.Screen 

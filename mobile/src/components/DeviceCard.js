@@ -1,139 +1,193 @@
-import React from 'react';
-import { StyleSheet, View, TouchableOpacity, Dimensions } from 'react-native';
-import { Text, IconButton, useTheme } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
+const TOKENS = {
+  bg: "#0D0D0D",
+  cardBg: "#1A1A1A",
+  accent: "#22C55E",
+  border: "#262626",
+  textPrimary: "#FFFFFF",
+  textSecondary: "#9CA3AF"
+};
+export default function DeviceCard({ device, onToggle, onIncrease, onDecrease }) {
+  const isEnabled = !!device.status;
+  return <View style={[
+    styles.card,
+    isEnabled && styles.cardActive
+  ]}>
+      <View style={styles.cardHeader}>
+        <View style={styles.infoBlock}>
+          <Text style={styles.deviceName} numberOfLines={1}>
+            {device.name}
+          </Text>
+          <Text style={styles.deviceType}>
+            {device.type.toUpperCase()}
+          </Text>
+        </View>
 
-// Calculate grid card size (roughly half screen width minus margins)
-const { width } = Dimensions.get('window');
-const CARD_SIZE = (width - 48) / 2;
-
-export default function DeviceCard({ device, onToggle, onDelete }) {
-  const theme = useTheme();
-  
-  // Choose icon based on device type and status
-  const getDeviceIcon = () => {
-    const type = (device?.device_type || device?.type || 'light').toLowerCase();
-    const status = device?.current_state?.status === 'ON' || !!device?.status;
-    switch (type) {
-      case 'light':
-        return status ? 'lightbulb-on' : 'lightbulb-outline';
-      case 'fan':
-        return 'fan';
-      case 'ac':
-        return 'air-conditioner';
-      default:
-        return 'developer-board';
-    }
-  };
-
-  const activeColor = '#22C55E';
-  const inactiveColor = '#262626';
-  const statusOn = device?.current_state?.status === 'ON' || !!device?.status;
-  const textColor = statusOn ? '#FFFFFF' : '#9CA3AF';
-  const iconColor = statusOn ? '#22C55E' : '#9CA3AF';
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.8}
-      onPress={() => onToggle && onToggle(device?.id, !statusOn)}
-      style={[
-        styles.cardContainer,
         {
-          borderColor: statusOn ? activeColor : inactiveColor,
-        }
-      ]}
-    >
-      {/* Top right corner: Small delete button */}
-      <IconButton
-        icon="close-circle-outline"
-        iconColor={statusOn ? 'rgba(255, 255, 255, 0.4)' : '#9CA3AF'}
-        size={18}
-        onPress={() => onDelete && onDelete(device?.id)}
-        style={styles.deleteBtn}
-      />
-
-      {/* Center Section: Clean Icon Wrapper */}
-      <View style={styles.iconContainer}>
-        <MaterialCommunityIcons 
-          name={getDeviceIcon()} 
-          size={36} 
-          color={iconColor} 
-        />
+    /* Toggle Switch */
+  }
+        <TouchableOpacity
+    style={[styles.switchTrack, isEnabled && styles.switchTrackActive]}
+    onPress={onToggle}
+    activeOpacity={0.8}
+    accessibilityRole="switch"
+    accessibilityState={{ checked: isEnabled }}
+    accessibilityLabel={`Toggle ${device.name}`}
+  >
+          <View style={[styles.switchThumb, isEnabled && styles.switchThumbActive]} />
+        </TouchableOpacity>
       </View>
 
-      {/* Bottom Section: Device Label & Category */}
-      <View style={styles.textContainer}>
-        <Text style={[styles.deviceName, { color: textColor }]} numberOfLines={1}>
-          {device?.name || 'Unknown Node'}
-        </Text>
-        <Text style={styles.deviceType}>
-          {(device?.device_type || device?.type || 'UNKNOWN').toUpperCase()}
-        </Text>
-      </View>
+      {
+    /* Adjuster controls for Light (dimmer) or Thermostat (temperature) */
+  }
+      {(device.type === "light" || device.type === "thermostat") && <View style={styles.adjusterRow}>
+          <TouchableOpacity
+    style={styles.adjustButton}
+    onPress={onDecrease}
+    accessibilityRole="button"
+    accessibilityLabel="Decrease value"
+  >
+            <Text style={styles.adjustButtonText}>-</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.valueContainer}>
+            <Text style={styles.valueText}>
+              {device.value}{device.type === "light" ? "%" : "\xB0F"}
+            </Text>
+          </View>
 
-      {/* Active Dot Status */}
-      <View style={[
-        styles.statusDot,
-        { backgroundColor: statusOn ? activeColor : '#374151' }
-      ]} />
-    </TouchableOpacity>
-  );
+          <TouchableOpacity
+    style={styles.adjustButton}
+    onPress={onIncrease}
+    accessibilityRole="button"
+    accessibilityLabel="Increase value"
+  >
+            <Text style={styles.adjustButtonText}>+</Text>
+          </TouchableOpacity>
+        </View>}
+
+      {
+    /* Static Info for power outlets */
+  }
+      {device.type === "outlet" && <View style={styles.outletRow}>
+          <Text style={styles.outletLabel}>Load Power</Text>
+          <Text style={[styles.outletValue, isEnabled && styles.outletValueActive]}>
+            {isEnabled ? `${device.value} W` : "0 W"}
+          </Text>
+        </View>}
+    </View>;
 }
-
 const styles = StyleSheet.create({
-  cardContainer: {
-    width: CARD_SIZE,
-    height: CARD_SIZE,
+  card: {
+    width: "48%",
+    backgroundColor: TOKENS.cardBg,
     borderRadius: 16,
     padding: 16,
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 16,
-    position: 'relative',
-    backgroundColor: '#1A1A1A',
-    borderWidth: 1.5,
-  },
-  deleteBtn: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    margin: 0,
-    zIndex: 10,
-  },
-  iconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 10,
-    backgroundColor: '#0D0D0D',
     borderWidth: 1,
-    borderColor: '#262626',
+    borderColor: TOKENS.border
   },
-  textContainer: {
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: 4,
+  cardActive: {
+    borderColor: TOKENS.accent
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16
+  },
+  infoBlock: {
+    flex: 1,
+    marginRight: 8
   },
   deviceName: {
     fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-    textAlign: 'center',
+    fontWeight: "600",
+    color: TOKENS.textPrimary
   },
   deviceType: {
     fontSize: 9,
-    color: '#9CA3AF',
-    marginTop: 2,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    fontWeight: "700",
+    color: TOKENS.textSecondary,
+    marginTop: 4,
+    letterSpacing: 1
   },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    position: 'absolute',
-    bottom: 12,
+  switchTrack: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#262626",
+    padding: 2,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: TOKENS.border
   },
+  switchTrackActive: {
+    backgroundColor: "rgba(34, 197, 94, 0.2)",
+    borderColor: TOKENS.accent
+  },
+  switchThumb: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: TOKENS.textSecondary
+  },
+  switchThumbActive: {
+    backgroundColor: TOKENS.accent,
+    transform: [{ translateX: 20 }]
+  },
+  adjusterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: TOKENS.bg,
+    borderRadius: 8,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: TOKENS.border
+  },
+  adjustButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: TOKENS.cardBg,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  adjustButtonText: {
+    color: TOKENS.textPrimary,
+    fontSize: 16,
+    fontWeight: "bold"
+  },
+  valueContainer: {
+    alignItems: "center"
+  },
+  valueText: {
+    color: TOKENS.textPrimary,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  outletRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: TOKENS.bg,
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: TOKENS.border
+  },
+  outletLabel: {
+    fontSize: 11,
+    color: TOKENS.textSecondary
+  },
+  outletValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: TOKENS.textSecondary
+  },
+  outletValueActive: {
+    color: TOKENS.accent
+  }
 });
