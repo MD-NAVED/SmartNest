@@ -117,6 +117,16 @@ export default function HistoryScreen() {
     }
   };
 
+  // Helper to extract status from either a string or JSONB state object
+  const getStatusString = (state) => {
+    if (!state) return 'OFF';
+    if (typeof state === 'string') return state;
+    if (typeof state === 'object') {
+      return state.status || 'OFF';
+    }
+    return 'OFF';
+  };
+
   if (loadingDevices && devices.length === 0) {
     return (
       <View style={styles.centerContainer}>
@@ -138,54 +148,50 @@ export default function HistoryScreen() {
         </View>
       ) : (
         <View style={{ flex: 1 }}>
-          {/* Horizontal scroll selection for devices */}
+          {/* Header Horizontal Device Filter */}
           <View style={styles.headerSelection}>
-            <Text style={styles.selectionLabel}>Select active node:</Text>
-            <ScrollView 
-              horizontal 
+            <Text style={styles.selectionLabel}>Select Appliance Hub</Text>
+            <FlatList
+              horizontal
               showsHorizontalScrollIndicator={false}
+              data={devices}
+              keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={styles.deviceSlider}
-            >
-              {devices.map((device) => {
-                const isSelected = !!(selectedDevice && selectedDevice.id === device.id);
+              renderItem={({ item }) => {
+                const isSelected = !!(selectedDevice && selectedDevice.id === item.id);
                 return (
-                  <Chip
-                    key={device?.id}
-                    selected={isSelected}
-                    onPress={() => handleSelectDevice(device)}
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => handleSelectDevice(item)}
                     style={[
-                      styles.deviceChip, 
-                      isSelected ? { 
-                        backgroundColor: '#22C55E',
-                      } : {
-                        backgroundColor: '#1A1A1A'
+                      styles.deviceChip,
+                      {
+                        backgroundColor: isSelected ? 'rgba(34, 197, 94, 0.08)' : '#1A1A1A',
+                        borderColor: isSelected ? '#22C55E' : '#262626',
                       }
                     ]}
-                    selectedColor={isSelected ? '#000000' : '#FFFFFF'}
-                    textStyle={[
-                      styles.chipText, 
-                      isSelected && { fontWeight: '700', color: '#000000' }
-                    ]}
-                    showSelectedOverlay
                   >
-                    {device.name}
-                  </Chip>
+                    <Text style={[styles.chipText, { color: isSelected ? '#22C55E' : '#FFFFFF', fontWeight: isSelected ? '700' : '600' }]}>
+                      {item.name}
+                    </Text>
+                  </TouchableOpacity>
                 );
-              })}
-            </ScrollView>
+              }}
+            />
           </View>
 
-          {/* Timeline History List */}
+          {/* History Event Timeline */}
           {loadingHistory ? (
             <View style={styles.centerContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <ActivityIndicator size="large" color="#22C55E" />
+              <Text style={{ color: '#9CA3AF', marginTop: 12, fontSize: 13 }}>Retrieving logs...</Text>
             </View>
           ) : history.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <MaterialCommunityIcons name="dots-horizontal-circle-outline" size={64} color="rgba(34, 197, 94, 0.1)" />
-              <Text style={styles.emptyTitle}>Log Index Empty</Text>
+              <MaterialCommunityIcons name="timeline-alert-outline" size={60} color="rgba(156, 163, 175, 0.2)" />
+              <Text style={styles.emptyTitle}>No Timeline Events</Text>
               <Text style={styles.emptySubtitle}>
-                No log sequence recorded for {selectedDevice?.name || 'this node'} yet.
+                No commands have been transmitted to {selectedDevice?.name || 'this appliance'} yet.
               </Text>
             </View>
           ) : (
@@ -202,6 +208,8 @@ export default function HistoryScreen() {
               }
               renderItem={({ item, index }) => {
                 const logStyle = getLogStyle(item.change_type);
+                const prevStateStr = getStatusString(item.previous_state);
+                const newStateStr = getStatusString(item.new_state);
                 return (
                   <View style={styles.timelineItem}>
                     {/* Left Timeline Indicator */}
@@ -227,19 +235,19 @@ export default function HistoryScreen() {
                         {item.change_type === 'command_sent' && (
                           <Text style={styles.eventDesc}>
                             Signal sent: Toggled from{' '}
-                            <Text style={item.previous_state === 'ON' ? styles.onStateText : styles.offStateText}>
-                              {item.previous_state}
+                            <Text style={prevStateStr === 'ON' ? styles.onStateText : styles.offStateText}>
+                              {prevStateStr}
                             </Text>{' '}
                             →{' '}
-                            <Text style={item.new_state === 'ON' ? styles.onStateText : styles.offStateText}>
-                              {item.new_state}
+                            <Text style={newStateStr === 'ON' ? styles.onStateText : styles.offStateText}>
+                              {newStateStr}
                             </Text>
                           </Text>
                         )}
 
                         {item.change_type === 'status_confirmed' && (
                           <Text style={styles.eventDesc}>
-                            Node confirmation packet received. Confirmed state: <Text style={item.new_state === 'ON' ? styles.onStateText : styles.offStateText}>{item.new_state}</Text>
+                            Node confirmation packet received. Confirmed state: <Text style={newStateStr === 'ON' ? styles.onStateText : styles.offStateText}>{newStateStr}</Text>
                           </Text>
                         )}
                       </Card.Content>

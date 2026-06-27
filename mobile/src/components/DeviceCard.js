@@ -12,14 +12,14 @@ export default function DeviceCard({ device, onToggle, onDelete }) {
   
   // Choose icon based on device type and status
   const getDeviceIcon = () => {
-    const type = device?.type || 'light';
-    const status = !!device?.status;
+    const type = (device?.device_type || device?.type || 'light').toLowerCase();
+    const status = device?.current_state?.status === 'ON' || !!device?.status;
     switch (type) {
       case 'light':
         return status ? 'lightbulb-on' : 'lightbulb-outline';
       case 'fan':
         return 'fan';
-      case 'AC':
+      case 'ac':
         return 'air-conditioner';
       default:
         return 'developer-board';
@@ -28,7 +28,7 @@ export default function DeviceCard({ device, onToggle, onDelete }) {
 
   const activeColor = '#22C55E';
   const inactiveColor = '#262626';
-  const statusOn = !!device?.status;
+  const statusOn = device?.current_state?.status === 'ON' || !!device?.status;
   const textColor = statusOn ? '#FFFFFF' : '#9CA3AF';
   const iconColor = statusOn ? '#22C55E' : '#9CA3AF';
 
@@ -67,7 +67,7 @@ export default function DeviceCard({ device, onToggle, onDelete }) {
           {device?.name || 'Unknown Node'}
         </Text>
         <Text style={styles.deviceType}>
-          {(device?.type || 'UNKNOWN').toUpperCase()}
+          {(device?.device_type || device?.type || 'UNKNOWN').toUpperCase()}
         </Text>
       </View>
 

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
-import { Text, TextInput, SegmentedButtons, Snackbar, useTheme } from 'react-native-paper';
+import { Text, TextInput, SegmentedButtons, Snackbar, useTheme, ActivityIndicator } from 'react-native-paper';
 import apiClient from '../api/client';
 
 export default function AddDeviceScreen({ navigation }) {
@@ -8,15 +8,81 @@ export default function AddDeviceScreen({ navigation }) {
   
   const [name, setName] = useState('');
   const [type, setType] = useState('light');
+  const [nodeId, setNodeId] = useState('');
   const [loading, setLoading] = useState(false);
+  const [setupLoading, setSetupLoading] = useState(true);
+
+  // Relational variables
+  const [homeId, setHomeId] = useState(null);
+  const [roomId, setRoomId] = useState(null);
   
   // Alert Snackbar states
   const [errorMsg, setErrorMsg] = useState('');
   const [showSnackbar, setShowSnackbar] = useState(false);
 
+  // Initialize Home & Room references from backend on mount
+  useEffect(() => {
+    const initializeRelationalData = async () => {
+      try {
+        setSetupLoading(true);
+        // 1. Fetch homes
+        let activeHomeId = null;
+        const homesRes = await apiClient.get('/api/homes');
+        if (homesRes.data && homesRes.data.length > 0) {
+          activeHomeId = homesRes.data[0].id;
+        } else {
+          // Create default home
+          const createHomeRes = await apiClient.post('/api/homes', { name: '4Layers SmartNest' });
+          activeHomeId = createHomeRes.data.id;
+        }
+        setHomeId(activeHomeId);
+
+        // 2. Fetch rooms for the active home
+        let activeRoomId = null;
+        const roomsRes = await apiClient.get(`/api/rooms/home/${activeHomeId}`);
+        if (roomsRes.data && roomsRes.data.length > 0) {
+          activeRoomId = roomsRes.data[0].id;
+        } else {
+          // Create default room (Living Room)
+          const createRoomRes = await apiClient.post('/api/rooms', {
+            name: 'Living Room',
+            room_type: 'living_room',
+            home_id: activeHomeId
+          });
+          activeRoomId = createRoomRes.data.id;
+        }
+        setRoomId(activeRoomId);
+
+        // Generate a random Node ID by default to simplify setup
+        const randId = `4L-NODE-${Math.floor(100 + Math.random() * 900)}`;
+        setNodeId(randId);
+      } catch (error) {
+        console.error('[AddDevice] Init error:', error);
+        setErrorMsg('Failed to sync homes/rooms metadata. Please try again.');
+        setShowSnackbar(true);
+      } finally {
+        setSetupLoading(false);
+      }
+    };
+
+    initializeRelationalData();
+  }, []);
+
   const handleAddDevice = async () => {
     if (!name.trim()) {
       setErrorMsg('Please assign a node identity name.');
+      setShowSnackbar(true);
+      return;
+    }
+
+    if (!nodeId.trim()) {
+      setErrorMsg('Please assign a physical Node ID.');
+      setShowSnackbar(true);
+      return;
+    }
+
+    if (!homeId) {
+      setErrorMsg('No active home found. Please refresh.');
       setShowSnackbar(true);
       return;
     }
@@ -27,7 +93,10 @@ export default function AddDeviceScreen({ navigation }) {
     try {
       const payload = {
         name: name.trim(),
-        type: type,
+        device_type: type.toLowerCase(),
+        node_id: nodeId.trim(),
+        home_id: homeId,
+        room_id: roomId
       };
 
       await apiClient.post('/api/devices', payload);
@@ -44,6 +113,15 @@ export default function AddDeviceScreen({ navigation }) {
     }
   };
 
+  if (setupLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#22C55E" />
+        <Text style={styles.loadingText}>Syncing IoT Metadata...</Text>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -58,6 +136,19 @@ export default function AddDeviceScreen({ navigation }) {
             onChangeText={setName}
             mode="outlined"
             maxLength={50}
+            textColor="#FFFFFF"
+            activeOutlineColor="#22C55E"
+            outlineColor="#262626"
+            style={styles.input}
+          />
+
+          <Text style={styles.sectionLabel}>Physical Node ID (ESP32 Chip ID)</Text>
+          <TextInput
+            label="e.g. 4L-NODE-001"
+            value={nodeId}
+            onChangeText={setNodeId}
+            mode="outlined"
+            maxLength={30}
             textColor="#FFFFFF"
             activeOutlineColor="#22C55E"
             outlineColor="#262626"
@@ -88,7 +179,7 @@ export default function AddDeviceScreen({ navigation }) {
                 labelStyle: styles.segmentLabel,
               },
               {
-                value: 'AC',
+                value: 'ac',
                 label: 'AC',
                 icon: 'air-conditioner',
                 labelStyle: styles.segmentLabel,
@@ -148,62 +239,74 @@ const styles = StyleSheet.create({
   },
   formCard: {
     backgroundColor: '#1A1A1A',
-    borderRadius: 16,
+    borderRadius: 24,
     padding: 24,
     borderWidth: 1.5,
     borderColor: '#262626',
-    marginTop: 8,
+    marginTop: 10,
   },
   sectionLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: '#9CA3AF',
-    marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginBottom: 8,
+    marginTop: 16,
   },
   input: {
-    marginBottom: 24,
     backgroundColor: '#0D0D0D',
+    marginBottom: 8,
+    fontSize: 14,
   },
   segmentedButtons: {
-    marginBottom: 32,
+    marginVertical: 12,
     backgroundColor: '#0D0D0D',
     borderRadius: 8,
-    borderColor: '#262626',
   },
   segmentLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   submitBtn: {
-    borderRadius: 8,
     backgroundColor: '#22C55E',
+    borderRadius: 12,
     paddingVertical: 14,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginTop: 28,
   },
   btnText: {
-    color: '#000000',
-    fontWeight: '700',
+    color: '#0D0D0D',
     fontSize: 15,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
   cancelBtn: {
-    borderRadius: 8,
+    backgroundColor: 'transparent',
     borderWidth: 1.5,
     borderColor: '#262626',
-    paddingVertical: 12,
-    justifyContent: 'center',
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
+    marginTop: 12,
   },
   cancelBtnText: {
     color: '#9CA3AF',
-    fontWeight: '700',
     fontSize: 15,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#0D0D0D',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

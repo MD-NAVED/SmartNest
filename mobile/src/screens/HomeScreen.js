@@ -75,21 +75,45 @@ export default function HomeScreen({ navigation }) {
   const handleToggleDevice = async (id, currentVal) => {
     const targetState = currentVal ? 'ON' : 'OFF';
 
-    // Optimistic UI state update
+    // Optimistic UI state update (handling both old status field and new current_state schema)
     setDevices((prevDevices) =>
-      prevDevices.map((d) => (d.id === id ? { ...d, status: currentVal } : d))
+      prevDevices.map((d) => {
+        if (d.id === id) {
+          return { 
+            ...d, 
+            status: currentVal,
+            current_state: {
+              ...d.current_state,
+              status: targetState
+            }
+          };
+        }
+        return d;
+      })
     );
 
     try {
       await apiClient.post(`/api/devices/${id}/control`, {
-        status: targetState,
+        state: { status: targetState },
       });
       fetchDevices(false);
     } catch (error) {
       console.error('[Home] Error controlling device:', error);
       // Revert local state on failure
       setDevices((prevDevices) =>
-        prevDevices.map((d) => (d.id === id ? { ...d, status: !currentVal } : d))
+        prevDevices.map((d) => {
+          if (d.id === id) {
+            return {
+              ...d,
+              status: !currentVal,
+              current_state: {
+                ...d.current_state,
+                status: !currentVal ? 'ON' : 'OFF'
+              }
+            };
+          }
+          return d;
+        })
       );
     }
   };
