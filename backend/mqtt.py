@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import random
+from datetime import datetime
 import paho.mqtt.client as mqtt
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
@@ -25,9 +26,9 @@ def on_connect(client, userdata, flags, rc):
     """Callback when client connects to broker."""
     if rc == 0:
         logger.info("Connected successfully to MQTT Broker: %s:%d", MQTT_BROKER, MQTT_PORT)
-        # Subscribe to status confirmation updates
-        # Topic pattern: home/{user_id}/{device_id}/status
-        subscribe_topic = "home/+/+/status"
+        # Subscribe to status confirmation updates for all device nodes
+        # Topic pattern: home/device/{node_id}/status
+        subscribe_topic = "home/device/+/status"
         client.subscribe(subscribe_topic)
         logger.info("Subscribed to status topic: %s", subscribe_topic)
     else:
@@ -41,70 +42,62 @@ def on_message(client, userdata, msg):
     """Callback when a message is received from the broker."""
     logger.info("Received MQTT message on topic: %s, payload: %s", msg.topic, msg.payload)
     try:
-        # Parse topic: home/{user_id}/{device_id}/status
+        # Parse topic: home/device/{node_id}/status
         parts = msg.topic.split('/')
-        if len(parts) == 4 and parts[0] == "home" and parts[3] == "status":
-            if not parts[1].isdigit() or not parts[2].isdigit():
-                # Ignore messages with non-integer user or device IDs (from other users on the public broker)
-                return
-            user_id = int(parts[1])
-            device_id = int(parts[2])
+        if len(parts) == 4 and parts[0] == "home" and parts[1] == "device" and parts[3] == "status":
+            node_id = parts[2]
             
-            # Parse payload
+            # Parse payload as JSON
             payload_str = msg.payload.decode("utf-8").strip()
-            status_str = None
-            
-            # Try parsing as JSON first
             try:
-                data = json.loads(payload_str)
-                if isinstance(data, dict):
-                    status_str = data.get("status")
+                state_data = json.loads(payload_str)
             except json.JSONDecodeError:
-                pass
+                logger.error("Invalid JSON payload received on node %s: %s", node_id, payload_str)
+                return
             
-            # If not JSON, use the raw string
-            if not status_str:
-                status_str = payload_str
-            
-            status_str = status_str.upper()
-            if status_str not in ["ON", "OFF"]:
-                logger.error("Invalid status payload: %s", payload_str)
+            if not isinstance(state_data, dict):
+                logger.error("Payload must be a JSON object: %s", payload_str)
                 return
 
-            new_status_bool = (status_str == "ON")
-            
-            # Update database
-            # We must open a new session in the callback thread
+            # Update database in callback thread
             db: Session = SessionLocal()
             try:
-                # Query device and check ownership
-                device = db.query(models.Device).filter(
-                    models.Device.id == device_id,
-                    models.Device.owner_id == user_id
-                ).first()
+                # Query device by node_id
+                device = db.query(models.Device).filter(models.Device.node_id == node_id).first()
                 
                 if device:
-                    previous_state_str = "ON" if device.status else "OFF"
+                    previous_state = device.current_state or {}
                     
-                    # Update status in db if it changed or to verify state
-                    if device.status != new_status_bool:
-                        device.status = new_status_bool
+                    # Merge new state data into current_state
+                    new_state = {**previous_state, **state_data}
+                    
+                    # If state changed, update database and log history
+                    if previous_state != new_state:
+                        device.current_state = new_state
+                        device.is_online = True
+                        device.updated_at = datetime.utcnow()
                         db.add(device)
                         
                         # Log history as status_confirmed
                         history_entry = models.DeviceHistory(
                             device_id=device.id,
                             change_type="status_confirmed",
-                            previous_state=previous_state_str,
-                            new_state=status_str
+                            previous_state=previous_state,
+                            new_state=state_data
                         )
                         db.add(history_entry)
                         db.commit()
-                        logger.info("Device %d status confirmed via MQTT: %s", device_id, status_str)
+                        logger.info("Device node %s status confirmed via MQTT: %s", node_id, state_data)
                     else:
-                        logger.info("Device %d status is already %s. No change needed.", device_id, status_str)
+                        # Keep online status active
+                        if not device.is_online:
+                            device.is_online = True
+                            device.updated_at = datetime.utcnow()
+                            db.add(device)
+                            db.commit()
+                        logger.info("Device node %s state is already up-to-date.", node_id)
                 else:
-                    logger.warning("Device %d (user %d) not found in database.", device_id, user_id)
+                    logger.warning("Device node %s not found in database.", node_id)
             except Exception as e:
                 db.rollback()
                 logger.exception("Error processing MQTT message in DB: %s", e)
@@ -133,14 +126,14 @@ def stop_mqtt():
     client.disconnect()
     logger.info("MQTT loop stopped and disconnected.")
 
-def publish_control_message(user_id: int, device_id: int, status_str: str):
+def publish_control_message(node_id: str, state: dict):
     """
     Publish a control message to control a device.
-    Topic: home/{user_id}/{device_id}/control
-    Payload: {"status": "ON"} or {"status": "OFF"}
+    Topic: home/device/{node_id}/control
+    Payload: JSON string of state updates (e.g. {"status": "ON"})
     """
-    topic = f"home/{user_id}/{device_id}/control"
-    payload = json.dumps({"status": status_str.upper()})
+    topic = f"home/device/{node_id}/control"
+    payload = json.dumps(state)
     
     try:
         info = client.publish(topic, payload, qos=1)

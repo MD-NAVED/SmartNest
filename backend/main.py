@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import engine, Base
-from backend.routes import users, devices
+from backend.routes import users, devices, homes, rooms
 from backend import mqtt
 
 # Initialize FastAPI App
@@ -23,6 +23,8 @@ app.add_middleware(
 # Register routes
 app.include_router(users.router)
 app.include_router(devices.router)
+app.include_router(homes.router)
+app.include_router(rooms.router)
 
 # FastAPI Event Handlers
 @app.on_event("startup")

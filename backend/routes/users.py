@@ -1,34 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr, Field
 
 from backend.database import get_db
-from backend import models, auth
+from backend import models, auth, schemas
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
-# Pydantic Schemas
-class UserCreate(BaseModel):
-    username: str = Field(..., min_length=3, max_length=50)
-    email: EmailStr
-    password: str = Field(..., min_length=6)
-
-class UserResponse(BaseModel):
-    id: int
-    username: str
-    email: str
-
-    model_config = {
-        "from_attributes": True
-    }
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str
-
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
+@router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
+def register_user(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
     """Register a new user in the system."""
     # Check if username already exists
     existing_username = db.query(models.User).filter(models.User.username == user_data.username).first()
@@ -58,7 +38,7 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return new_user
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=schemas.TokenResponse)
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     Authenticate user and return a JWT access token.
@@ -82,7 +62,7 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
     access_token = auth.create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=schemas.UserResponse)
 def get_me(current_user: models.User = Depends(auth.get_current_user)):
     """Get profile information for the currently authenticated user."""
     return current_user

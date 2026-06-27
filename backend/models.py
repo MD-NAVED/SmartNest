@@ -1,43 +1,78 @@
+import uuid
 import datetime
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, text
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from backend.database import Base
 
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"), default=uuid.uuid4)
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
 
     # Relationships
-    devices = relationship("Device", back_populates="owner", cascade="all, delete-orphan")
+    homes = relationship("Home", back_populates="owner", cascade="all, delete-orphan")
+
+
+class Home(Base):
+    __tablename__ = "homes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"), default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, server_default=text("timezone('utc', now())"), nullable=False)
+
+    # Relationships
+    owner = relationship("User", back_populates="homes")
+    rooms = relationship("Room", back_populates="home", cascade="all, delete-orphan")
+    devices = relationship("Device", back_populates="home", cascade="all, delete-orphan")
+
+
+class Room(Base):
+    __tablename__ = "rooms"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"), default=uuid.uuid4)
+    home_id = Column(UUID(as_uuid=True), ForeignKey("homes.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    room_type = Column(String, nullable=False)  # e.g., "living_room", "bedroom", "kitchen", "bathroom"
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, server_default=text("timezone('utc', now())"), nullable=False)
+
+    # Relationships
+    home = relationship("Home", back_populates="rooms")
+    devices = relationship("Device", back_populates="room")
 
 
 class Device(Base):
     __tablename__ = "devices"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"), default=uuid.uuid4)
+    room_id = Column(UUID(as_uuid=True), ForeignKey("rooms.id", ondelete="SET NULL"), nullable=True)
+    home_id = Column(UUID(as_uuid=True), ForeignKey("homes.id", ondelete="CASCADE"), nullable=False)
+    node_id = Column(String, unique=True, index=True, nullable=False)  # Unique ESP32 Chip ID String
     name = Column(String, nullable=False)
-    type = Column(String, nullable=False)  # "light", "fan", "AC"
-    status = Column(Boolean, default=False, nullable=False)  # False = OFF, True = ON
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    device_type = Column(String, nullable=False)  # e.g., "light", "fan", "AC"
+    is_online = Column(Boolean, default=False, server_default=text("false"), nullable=False)
+    current_state = Column(JSONB, default={}, server_default=text("'{}'::jsonb"), nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, server_default=text("timezone('utc', now())"), nullable=False)
 
     # Relationships
-    owner = relationship("User", back_populates="devices")
+    home = relationship("Home", back_populates="devices")
+    room = relationship("Room", back_populates="devices")
     history = relationship("DeviceHistory", back_populates="device", cascade="all, delete-orphan")
 
 
 class DeviceHistory(Base):
     __tablename__ = "device_histories"
 
-    id = Column(Integer, primary_key=True, index=True)
-    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False)
-    change_type = Column(String, nullable=False)  # "command_sent" or "status_confirmed"
-    previous_state = Column(String, nullable=True)  # "ON" or "OFF"
-    new_state = Column(String, nullable=False)  # "ON" or "OFF"
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"), default=uuid.uuid4)
+    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False)
+    change_type = Column(String, nullable=False)  # "command_sent", "status_confirmed", "device_created"
+    previous_state = Column(JSONB, nullable=True)
+    new_state = Column(JSONB, nullable=False)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, server_default=text("timezone('utc', now())"), nullable=False)
 
     # Relationships
     device = relationship("Device", back_populates="history")
