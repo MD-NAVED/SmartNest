@@ -1,6 +1,1 @@
-{
-  "name": "4Layers SmartNest Dashboard",
-  "description": "Premium black and green interactive IoT control center for 4Layers smart home appliances, nodes, and schedules.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
+{"name":"4Layers SmartNest Dashboard","description":"Premium black and green interactive IoT control center for 4Layers smart home appliances, nodes, and schedules.","requestFramePermissions":[],"majorCapabilities":["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]}

@@ -57,12 +57,20 @@ export default function App() {
   
   // Persisted state managers (stored locally in browser since no DB table exists)
   const [schedules, setSchedules] = useState<Schedule[]>(() => {
-    const saved = localStorage.getItem('schedules');
-    return saved ? JSON.parse(saved) : initialSchedules;
+    try {
+      const saved = localStorage.getItem('schedules');
+      return saved ? JSON.parse(saved) : initialSchedules;
+    } catch (e) {
+      return initialSchedules;
+    }
   });
   const [alerts, setAlerts] = useState<AlertLog[]>(() => {
-    const saved = localStorage.getItem('alerts');
-    return saved ? JSON.parse(saved) : initialAlerts;
+    try {
+      const saved = localStorage.getItem('alerts');
+      return saved ? JSON.parse(saved) : initialAlerts;
+    } catch (e) {
+      return initialAlerts;
+    }
   });
   
   // Navigation & Filtering
@@ -322,7 +330,7 @@ export default function App() {
     if (!token) return;
     const targetState = targetStatus ? 'ON' : 'OFF';
     
-    // Filter active items in current context
+    // Filter active items in current room context and online nodes
     const itemsToToggle = devices.filter(d => {
       if (selectedRoomId !== 'room-all' && d.roomId !== selectedRoomId) return false;
       const associatedNode = nodes.find(n => n.id === d.nodeId);
@@ -460,7 +468,6 @@ export default function App() {
 
   // Node Status Simulation
   const handleToggleNodeStatus = (nodeId: string) => {
-    // Toggles the local connection status of the node
     setNodes(prev => prev.map(node => {
       if (node.id === nodeId) {
         const nextStatus = node.status === 'online' ? 'offline' : 'online';
@@ -515,7 +522,6 @@ export default function App() {
   };
 
   const roomIdToUUID = (id: string) => {
-    // Helper to extract the actual room UUID
     if (id.startsWith('room-')) return null;
     return id;
   };
@@ -603,430 +609,234 @@ export default function App() {
   }
 
   // Filtered devices list based on space selection
-  const filteredDevices = devices.filter((device) => {
-    if (selectedRoomId === 'room-all') return true;
-    return device.roomId === selectedRoomId;
-  });
+  const filteredDevices = selectedRoomId === 'room-all' 
+    ? devices 
+    : devices.filter((device) => device.roomId === selectedRoomId);
+
+  // Helper mapping room icon strings to Lucide components
+  const renderRoomIcon = (iconName: string, active: boolean) => {
+    const iconClass = `h-4 w-4 ${active ? 'text-brand-green' : 'text-gray-400 group-hover:text-white'}`;
+    switch (iconName) {
+      case 'LayoutDashboard': return <LayoutDashboard className={iconClass} />;
+      case 'Sofa': return <Sofa className={iconClass} />;
+      case 'Bed': return <Bed className={iconClass} />;
+      case 'CookingPot': return <CookingPot className={iconClass} />;
+      case 'Wind': return <Wind className={iconClass} />;
+      default: return <LayoutDashboard className={iconClass} />;
+    }
+  };
+
+  // Uptime analytics calculations
+  const totalWatts = devices
+    .filter(d => d.status)
+    .reduce((sum, d) => sum + (d.type === 'plug' ? d.value : d.type === 'light' ? Math.round(d.value * 0.15) : d.type === 'fan' ? d.value * 12 : 120), 0);
+
+  const activeNodesCount = nodes.filter(n => n.status === 'online').length;
 
   return (
-    <div className="min-h-screen bg-brand-dark text-white font-sans antialiased selection:bg-brand-green selection:text-brand-dark flex">
+    <div id="app-root-workspace" className="min-h-screen bg-brand-dark bg-grid text-gray-100 flex flex-col font-sans selection:bg-brand-green selection:text-brand-dark">
       
-      {/* 1. VERTICAL SIDEBAR ELEMENT */}
-      <aside className="w-64 bg-brand-card border-r border-brand-border/60 p-6 flex flex-col justify-between shrink-0 fixed top-0 bottom-0 left-0 z-50">
-        <div className="space-y-8">
-          {/* Logo container */}
-          <div className="flex flex-col items-center justify-center gap-3">
-            <div className="h-16 w-16 rounded-full overflow-hidden border-2 border-brand-green bg-brand-dark flex items-center justify-center">
-              <img src={logoImg} alt="4Layers Logo" className="h-full w-full object-cover" />
+      {/* 1. TOP STATUS / HERO METRICS HEADER */}
+      <header className="bg-brand-card/90 backdrop-blur-md border-b border-brand-border px-5 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sticky top-0 z-40">
+        
+        {/* Brand identity */}
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-brand-dark border border-brand-border flex items-center justify-center shadow-md shadow-brand-green/5 group hover:scale-105 transition-transform overflow-hidden">
+            <img src={logoImg} alt="4Layers Logo" className="h-full w-full object-cover" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="font-display font-extrabold text-white text-lg tracking-wider uppercase m-0">
+                4Layers
+              </h1>
+              <span className="text-[9px] bg-brand-green/10 border border-brand-green/30 text-brand-green px-1.5 py-0.5 rounded font-mono font-bold tracking-widest uppercase">
+                IoT OS v3.5
+              </span>
             </div>
-            <div className="text-center">
-              <h1 className="text-lg font-bold font-display tracking-tight text-white">4Layers</h1>
-              <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">SmartNest IoT OS v3.5</p>
-            </div>
+            <p className="text-[10px] text-gray-500 font-mono tracking-tight m-0">
+              SMARTNEST INTERACTIVE TELEMETRY STATION
+            </p>
+          </div>
+        </div>
+
+        {/* Global Hub Quick Stats */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs font-mono">
+          <div className="bg-brand-dark border border-brand-border px-3 py-1.5 rounded-lg">
+            <span className="text-gray-500 text-[9px] block">LOAD DRAW</span>
+            <span id="load-draw-stats" className="font-bold text-brand-green text-glow flex items-center gap-1 mt-0.5">
+              <Activity className="h-3 w-3 animate-pulse" />
+              {totalWatts} W
+            </span>
           </div>
 
-          {/* Area selectors */}
-          <div className="space-y-2">
-            <h2 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest px-3">Home Spaces</h2>
-            <nav className="space-y-1">
+          <div className="bg-brand-dark border border-brand-border px-3 py-1.5 rounded-lg">
+            <span className="text-gray-500 text-[9px] block">ACTIVE CLUSTER</span>
+            <span id="active-cluster-stats" className="font-bold text-white mt-0.5 block">
+              {activeNodesCount} / {nodes.length} Nodes
+            </span>
+          </div>
+
+          <div className="bg-brand-dark border border-brand-border px-3 py-1.5 rounded-lg">
+            <span className="text-gray-500 text-[9px] block">ONLINE APPLIANCES</span>
+            <span id="online-appliances-stats" className="font-bold text-white mt-0.5 block">
+              {devices.filter(d => d.status).length} On Standby
+            </span>
+          </div>
+
+          {/* Clock */}
+          <div className="bg-brand-dark border border-brand-border px-3 py-1.5 rounded-lg hidden sm:block">
+            <span className="text-gray-500 text-[9px] block">UTC TIMELINE</span>
+            <span className="font-bold text-gray-300 flex items-center gap-1.5 mt-0.5">
+              <Clock className="h-3 w-3 text-brand-green" />
+              {currentTime || '03:16 UTC'}
+            </span>
+          </div>
+        </div>
+
+        {/* Header Right Master switches */}
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <button
+            id="global-switch-off-btn"
+            onClick={() => handleMasterSwitch(false)}
+            className="flex-1 md:flex-none px-3.5 py-1.5 rounded-lg border border-brand-border bg-brand-dark text-[11px] font-mono font-bold text-gray-400 hover:text-white hover:border-red-900/60 transition-all uppercase flex items-center justify-center gap-1.5"
+          >
+            <Power className="h-3 w-3 text-red-500" />
+            Kill All
+          </button>
+          
+          <button
+            id="global-switch-on-btn"
+            onClick={() => handleMasterSwitch(true)}
+            className="flex-1 md:flex-none px-3.5 py-1.5 rounded-lg bg-brand-green text-brand-dark text-[11px] font-mono font-bold hover:bg-brand-green/90 transition-all uppercase flex items-center justify-center gap-1.5 glow-green"
+          >
+            <Power className="h-3 w-3" />
+            Engage All
+          </button>
+
+          {/* Alarm Notifications Toggle */}
+          <button
+            id="notification-bell-btn"
+            onClick={() => setShowNotificationCenter(!showNotificationCenter)}
+            className="h-8 w-8 rounded-lg border border-brand-border bg-brand-dark hover:border-brand-green/30 flex items-center justify-center text-gray-400 hover:text-white relative"
+          >
+            <Bell className="h-4 w-4" />
+            <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-brand-green glow-green" />
+          </button>
+        </div>
+      </header>
+
+      {/* 2. CORE WORKSPACE LAYOUT */}
+      <main className="flex-1 p-5 grid grid-cols-1 lg:grid-cols-12 gap-5 max-w-[1600px] w-full mx-auto">
+        
+        {/* SIDE BAR / LEFT NAV (3 Columns) */}
+        <section className="lg:col-span-3 space-y-4">
+          
+          {/* Space filter card */}
+          <div className="bg-brand-card border border-brand-border rounded-3xl p-5 shadow-xl">
+            <h3 className="font-display font-semibold text-xs uppercase text-gray-400 tracking-wider mb-3">
+              Home Areas & Spaces
+            </h3>
+            
+            <nav className="space-y-1.5" id="room-nav-sidebar">
               {rooms.map((room) => {
                 const isActive = selectedRoomId === room.id;
-                const count = room.id === 'room-all' 
-                  ? devices.filter(d => d.status).length
-                  : devices.filter(d => d.roomId === room.id && d.status).length;
-                const total = room.id === 'room-all'
-                  ? devices.length
-                  : devices.filter(d => d.roomId === room.id).length;
-
+                const devInRoom = room.id === 'room-all' ? devices : devices.filter(d => d.roomId === room.id);
+                const activeCount = devInRoom.filter(d => d.status).length;
+                
                 return (
                   <button
                     key={room.id}
+                    id={`sidebar-room-btn-${room.id}`}
                     onClick={() => setSelectedRoomId(room.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                    className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-all group ${
                       isActive 
-                        ? 'bg-brand-green/10 text-brand-green border-l-2 border-brand-green' 
-                        : 'text-gray-400 hover:bg-brand-card-hover hover:text-white'
+                        ? 'bg-brand-green text-brand-dark font-bold shadow-sm' 
+                        : 'text-gray-400 hover:text-white hover:bg-brand-dark/60'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      {room.icon === 'Sofa' && <Sofa className="h-4 w-4 shrink-0" />}
-                      {room.icon === 'Bed' && <Bed className="h-4 w-4 shrink-0" />}
-                      {room.icon === 'CookingPot' && <CookingPot className="h-4 w-4 shrink-0" />}
-                      {room.icon === 'Wind' && <Wind className="h-4 w-4 shrink-0" />}
-                      {room.icon === 'LayoutDashboard' && <LayoutDashboard className="h-4 w-4 shrink-0" />}
+                      {renderRoomIcon(room.icon, isActive)}
                       <span>{room.name}</span>
                     </div>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                      isActive ? 'bg-brand-green/20 text-brand-green' : 'bg-brand-dark text-gray-500'
+
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                      isActive 
+                        ? 'bg-brand-dark text-brand-green font-bold' 
+                        : 'bg-brand-dark/40 text-gray-500 font-medium'
                     }`}>
-                      {count}/{total}
+                      {activeCount}/{devInRoom.length} Active
                     </span>
                   </button>
                 );
               })}
             </nav>
           </div>
-        </div>
 
-        {/* Exit Session and system profile */}
-        <div className="space-y-4 pt-4 border-t border-brand-border/40">
-          <div className="flex items-center gap-3 px-2">
-            <div className="h-8 w-8 rounded-full bg-brand-green/20 border border-brand-green/30 flex items-center justify-center text-xs font-bold text-brand-green">
-              {username.charAt(0)}
+          {/* Profile & Logout Section (Integrated) */}
+          <div className="bg-brand-card border border-brand-border rounded-3xl p-4 shadow-xl flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-full bg-brand-green/20 border border-brand-green/30 flex items-center justify-center text-xs font-bold text-brand-green uppercase font-mono">
+                {username.charAt(0)}
+              </div>
+              <div className="truncate">
+                <p className="text-xs font-bold text-white truncate m-0">{username}</p>
+                <p className="text-[9px] text-gray-500 font-medium uppercase m-0">Administrator</p>
+              </div>
             </div>
-            <div className="truncate">
-              <p className="text-xs font-bold truncate">{username}</p>
-              <p className="text-[9px] text-gray-500 font-medium">Administrator</p>
-            </div>
-          </div>
-
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 py-2.5 border border-brand-border text-xs font-semibold rounded-xl text-red-500 hover:bg-red-500/10 hover:border-red-500/20 transition-all duration-200"
-          >
-            <LogOut className="h-4 w-4" />
-            <span>Exit Session</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* 2. MAIN HUB VIEW */}
-      <main className="flex-1 ml-64 p-6 overflow-y-auto min-h-screen space-y-6">
-        
-        {/* TOP STATUS CONTROL HEADER BAR */}
-        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-5 border-b border-brand-border/40">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] bg-brand-green/10 text-brand-green border border-brand-green/20 px-2 py-0.5 rounded font-mono font-bold">
-                4LAYERS IOT OS V3.5
-              </span>
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-white mt-1">SmartNest Interactive Telemetry Station</h1>
-          </div>
-
-          {/* Quick Stats Grid */}
-          <div className="flex flex-wrap items-center gap-3">
-            
-            {/* Load Draw */}
-            <div className="bg-brand-card border border-brand-border rounded-xl px-4 py-2 flex flex-col">
-              <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider">Load Draw</span>
-              <span className="text-sm font-black text-brand-green flex items-center gap-1 font-mono">
-                ⚡ {devices.filter(d => d.status).reduce((acc, curr) => acc + (curr.type === 'plug' ? curr.value : 40), 0) + 120} W
-              </span>
-            </div>
-
-            {/* Active Gateways */}
-            <div className="bg-brand-card border border-brand-border rounded-xl px-4 py-2 flex flex-col">
-              <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider">Active Cluster</span>
-              <span className="text-sm font-black text-white font-mono">
-                {nodes.filter(n => n.status === 'online').length} / {nodes.length} Nodes
-              </span>
-            </div>
-
-            {/* Standby Switches */}
-            <div className="bg-brand-card border border-brand-border rounded-xl px-4 py-2 flex flex-col">
-              <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider">Online Appliances</span>
-              <span className="text-sm font-black text-white font-mono">
-                {devices.filter(d => d.status).length} On Standby
-              </span>
-            </div>
-
-            {/* Clock */}
-            <div className="bg-brand-card border border-brand-border rounded-xl px-4 py-2 flex flex-col">
-              <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider">UTC Timeline</span>
-              <span className="text-sm font-black text-gray-400 flex items-center gap-1 font-mono">
-                <Clock className="h-3 w-3 text-brand-green" />
-                {currentTime || '00:00:00'}
-              </span>
-            </div>
-
-            {/* Master on/off actions */}
-            <div className="flex items-center gap-2 border-l border-brand-border/40 pl-3">
-              <button 
-                onClick={() => handleMasterSwitch(false)}
-                className="px-3 py-2 border border-red-500/20 text-red-500 text-xs font-bold rounded-lg uppercase tracking-wide hover:bg-red-500/10 flex items-center gap-1.5"
-              >
-                <Power className="h-3.5 w-3.5" />
-                Kill All
-              </button>
-              <button 
-                onClick={() => handleMasterSwitch(true)}
-                className="px-3 py-2 bg-brand-green text-brand-dark text-xs font-bold rounded-lg uppercase tracking-wide hover:bg-brand-green/90 flex items-center gap-1.5"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Engage All
-              </button>
-
-              <button 
-                onClick={() => setShowNotificationCenter(!showNotificationCenter)}
-                className="p-2 bg-brand-card border border-brand-border hover:border-gray-600 rounded-lg text-gray-400 hover:text-white relative"
-              >
-                <Bell className="h-4 w-4" />
-                {alerts.filter(a => a.type === 'error' || a.type === 'warning').length > 0 && (
-                  <span className="absolute top-1 right-1 h-1.5 w-1.5 bg-red-500 rounded-full" />
-                )}
-              </button>
-            </div>
-
-          </div>
-        </header>
-
-        {/* NOTIFICATION TIMELINE CENTER (Overlay slide down) */}
-        {showNotificationCenter && (
-          <section className="bg-brand-card border border-brand-border rounded-3xl p-5 shadow-2xl relative animate-in slide-in-from-top duration-200">
             <button 
-              onClick={() => setShowNotificationCenter(false)}
-              className="absolute right-4 top-4 text-gray-500 hover:text-white"
+              onClick={handleLogout}
+              className="p-2 border border-brand-border text-red-500 rounded-lg hover:bg-red-500/10 hover:border-red-500/20 transition-all duration-200"
+              title="Logout Session"
             >
-              <X className="h-4 w-4" />
+              <LogOut className="h-4 w-4" />
             </button>
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-              <Bell className="h-4 w-4 text-brand-green" /> Station Broadcast Logs & History
-            </h3>
-            <div className="max-h-48 overflow-y-auto space-y-2 pr-2 font-mono text-[10px]">
-              {alerts.length === 0 ? (
-                <p className="text-gray-600 text-center py-4">No broadcast history recorded.</p>
-              ) : (
-                alerts.map(a => (
-                  <div key={a.id} className="flex items-start justify-between py-1 border-b border-brand-border/40 gap-4">
-                    <div className="flex gap-2">
-                      <span className="text-gray-600 shrink-0">[{a.timestamp}]</span>
-                      <span className={`${
-                        a.type === 'error' ? 'text-red-400 font-bold' : 
-                        a.type === 'warning' ? 'text-yellow-400' : 
-                        a.type === 'success' ? 'text-brand-green' : 'text-gray-400'
-                      }`}>{a.message}</span>
-                    </div>
-                    {a.nodeId && <span className="text-gray-600 shrink-0">Node: {a.nodeId}</span>}
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-        )}
+          </div>
 
-        {/* TWO COLUMN INTERACTION BLOCK */}
-        <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
-
-          {/* LEFT TELEMETRY WORKSPACE (6 Columns) */}
-          <section className="lg:col-span-6 space-y-6">
-            
-            {/* ROOM HEADER ROW CONTROL */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-brand-green animate-ping" />
-                <span className="text-xs font-bold uppercase tracking-widest text-gray-400">
-                  {rooms.find(r => r.id === selectedRoomId)?.name || 'All Spaces'} Appliances
-                </span>
+          {/* Live REST API Diagnostics Control center */}
+          <div className="bg-brand-card border border-brand-border rounded-3xl p-5 shadow-xl">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Database className="h-3.5 w-3.5 text-brand-green" />
+                <h3 className="font-display font-semibold text-xs uppercase text-white tracking-wider">
+                  REST Diagnostics
+                </h3>
               </div>
-
               <button
-                onClick={() => setShowAddDeviceModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-card hover:bg-brand-card-hover border border-brand-border hover:border-gray-500 rounded-lg text-xs font-bold text-gray-300 transition-all duration-200"
+                id="ping-api-btn"
+                onClick={testBackendConnection}
+                disabled={backendStatus === 'checking'}
+                className="text-[10px] font-mono text-brand-green flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-40"
               >
-                <Plus className="h-3.5 w-3.5 text-brand-green" />
-                Register Appliance
+                <RefreshCw className={`h-2.5 w-2.5 ${backendStatus === 'checking' ? 'animate-spin' : ''}`} />
+                Test Sync
               </button>
             </div>
 
-            {/* ADD DEVICE MODAL CARD (Absolute Pop) */}
-            {showAddDeviceModal && (
-              <div className="bg-brand-card border border-brand-border rounded-3xl p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between pb-2 border-b border-brand-border/40">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Sliders className="h-4 w-4 text-brand-green" /> Link New Appliance Node
-                  </h3>
-                  <button onClick={() => setShowAddDeviceModal(false)} className="text-gray-500 hover:text-white">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <form onSubmit={handleCreateDevice} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Appliance Name</label>
-                      <input 
-                        type="text" 
-                        value={newDevName}
-                        onChange={(e) => setNewDevName(e.target.value)}
-                        placeholder="e.g. Living Spotlight"
-                        className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-green"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Category Type</label>
-                      <select 
-                        value={newDevType}
-                        onChange={(e) => setNewDevType(e.target.value as any)}
-                        className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-green"
-                      >
-                        <option value="light">Lightbulb</option>
-                        <option value="fan">Ceiling Fan</option>
-                        <option value="ac">Air Conditioner</option>
-                        <option value="plug">Power Switch/Plug</option>
-                        <option value="tv">Television</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Parent Gateway Node</label>
-                      <select 
-                        value={newDevNode}
-                        onChange={(e) => setNewDevNode(e.target.value)}
-                        className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-green"
-                      >
-                        {nodes.map(n => (
-                          <option key={n.id} value={n.id}>{n.name} ({n.id})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Target Room Area</label>
-                      <select 
-                        value={newDevRoom}
-                        onChange={(e) => setNewDevRoom(e.target.value)}
-                        className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-green"
-                      >
-                        {rooms.filter(r => r.id !== 'room-all').map(r => (
-                          <option key={r.id} value={r.id}>{r.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button 
-                      type="button"
-                      onClick={() => setShowAddDeviceModal(false)}
-                      className="px-4 py-2 border border-brand-border text-gray-400 font-bold text-xs rounded-lg uppercase hover:bg-brand-card-hover"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="submit"
-                      className="px-4 py-2 bg-brand-green text-brand-dark font-bold text-xs rounded-lg uppercase hover:bg-brand-green/90"
-                    >
-                      Deploy Appliance
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {/* SMART DEVICES CARD CONTROLS GRID */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" id="devices-controls-grid">
-              {filteredDevices.length === 0 ? (
-                <div className="col-span-full bg-brand-card/30 border border-dashed border-brand-border rounded-xl p-8 text-center text-xs text-gray-500 font-mono">
-                  No active smart appliances registered in this space. Click "Register Appliance" above.
-                </div>
-              ) : (
-                filteredDevices.map((device) => {
-                  const associatedNode = nodes.find(n => n.id === device.nodeId);
-                  const nodeStatus = associatedNode ? associatedNode.status : 'offline';
-
-                  return (
-                    <DeviceControlCard
-                      key={device.id}
-                      device={device}
-                      nodeStatus={nodeStatus}
-                      onUpdateDevice={handleUpdateDevice}
-                    />
-                  );
-                })
-              )}
-            </div>
-
-            {/* Quick workspace hints */}
-            <div className="bg-brand-card border border-brand-border rounded-3xl p-5 shadow-xl text-[10px] text-gray-500 font-mono flex items-center justify-between gap-2">
-              <span>
-                💡 Try toggling a Node offline in the <b>MQTT Nodes</b> table on the right. Online states instantly guard device relays!
-              </span>
-              <ArrowRight className="h-4 w-4 text-brand-green shrink-0" />
-            </div>
-
-          </section>
-
-          {/* ANALYTICS & HUB (4 Columns) */}
-          <section className="lg:col-span-4 space-y-4">
-            
-            {/* Telemetry Chart Component */}
-            <PowerChart />
-
-            {/* BLE Node provisioner scanner */}
-            <BluetoothScanner 
-              existingRooms={rooms}
-              onNodeAdded={handleBleNodeAdded} 
-            />
-
-            {/* Automated Cron Scheduler */}
-            <ScheduleManager 
-              devices={devices}
-              schedules={schedules}
-              onAddSchedule={handleAddSchedule}
-              onDeleteSchedule={handleDeleteSchedule}
-              onToggleSchedule={handleToggleSchedule}
-            />
-
-            {/* MQTT Gateways Monitor */}
-            <NodeMonitor 
-              nodes={nodes}
-              existingRooms={rooms}
-              onRebootNode={(id) => addAlert(`Gateway node ${id} triggered remote reboot sequence.`, 'info')}
-              onToggleNodeStatus={handleToggleNodeStatus}
-              onAddCustomNode={handleAddCustomNode}
-            />
-
-            {/* REST DIAGNOSTICS CONTROL PANEL */}
-            <div className="bg-brand-card border border-brand-border rounded-3xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-brand-border/40">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded bg-brand-dark border border-brand-border">
-                    <Globe className="h-4 w-4 text-brand-green" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">Rest Diagnostics</h3>
-                    <p className="text-[8px] text-gray-500 font-bold uppercase tracking-wider mt-0.5">Instance Host Gateway</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={testBackendConnection}
-                  disabled={backendStatus === 'checking'}
-                  className="flex items-center gap-1 px-2.5 py-1 border border-brand-border hover:border-gray-500 rounded text-[9px] font-bold text-gray-400 hover:text-white"
-                >
-                  <RefreshCw className={`h-3 w-3 text-brand-green ${backendStatus === 'checking' ? 'animate-spin' : ''}`} />
-                  Test Sync
-                </button>
-              </div>
-
-              {/* Endpoint Host Inputs */}
-              <div className="space-y-1.5">
-                <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wider">Instance Host URL</span>
-                <input 
-                  type="text" 
+            <div className="space-y-2">
+              <div className="text-[10px] text-gray-400 font-mono">
+                Instance Host URL:
+                <input
+                  id="api-host-input"
+                  type="text"
                   value={backendUrl}
                   onChange={(e) => setBackendUrl(e.target.value)}
-                  className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-1.5 text-[10px] text-gray-400 font-mono focus:outline-none focus:border-brand-green"
+                  className="w-full bg-brand-dark border border-brand-border rounded px-2 py-1 mt-1 text-[9px] text-brand-green focus:outline-none focus:border-brand-green/60 font-mono"
                 />
               </div>
 
-              <div className="flex items-center justify-between text-[10px] font-mono">
+              <div className="flex justify-between text-[10px] font-mono border-t border-brand-border/40 pt-2 mt-2">
                 <span className="text-gray-500">Live API Status:</span>
-                <span className={`font-bold ${
+                <span id="api-status-badge" className={`font-bold uppercase ${
                   backendStatus === 'online' ? 'text-brand-green' : 
                   backendStatus === 'sleeping' ? 'text-yellow-500' :
                   backendStatus === 'offline' ? 'text-red-500' : 'text-gray-500'
                 }`}>
-                  {backendStatus.toUpperCase()}
+                  {backendStatus}
                 </span>
               </div>
 
               {/* Console log outputs */}
-              <div className="bg-brand-dark rounded-xl p-3 border border-brand-border/40 font-mono text-[9px] text-gray-500 max-h-32 overflow-y-auto space-y-1">
+              <div className="bg-brand-dark rounded p-2.5 border border-brand-border/40 font-mono text-[9px] text-gray-500 max-h-28 overflow-y-auto space-y-0.5">
                 {diagnosticLogs.map((log, i) => (
                   <div key={i} className={log.startsWith('✔') ? 'text-brand-green' : log.startsWith('❌') ? 'text-red-400' : log.startsWith('⌛') ? 'text-yellow-400' : ''}>
                     {log}
@@ -1034,38 +844,207 @@ export default function App() {
                 ))}
               </div>
             </div>
+          </div>
 
-            {/* HARDWARE OVERVIEW INFO CARD */}
-            <div className="bg-brand-card border border-brand-border rounded-3xl p-5 shadow-xl space-y-3 font-mono text-[9px]">
-              <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-brand-border/40 pb-2">Hardware Stack Overview</h4>
-              
-              <div className="space-y-1 text-gray-500">
-                <div className="flex justify-between">
-                  <span>Database:</span>
-                  <span className="text-white flex items-center gap-1"><Database className="h-3 w-3 text-brand-green" /> Supabase postgresql pooler</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Broker Protocol:</span>
-                  <span className="text-white">MQTT v5.1.1 EMQX Client</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Broker Port:</span>
-                  <span className="text-white">1883 TCP (Local)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Device Provisioning:</span>
-                  <span className="text-white">Bluetooth GATT OTA</span>
-                </div>
+          {/* HARDWARE OVERVIEW INFO CARD */}
+          <div className="bg-brand-card border border-brand-border rounded-3xl p-5 shadow-xl space-y-3 font-mono text-[9px] text-gray-400">
+            <h4 className="text-[10px] font-bold text-white uppercase tracking-widest border-b border-brand-border/40 pb-2">Hardware Stack Overview</h4>
+            
+            <div className="space-y-1.5">
+              <div className="flex justify-between">
+                <span>Database:</span>
+                <span className="text-white flex items-center gap-1"><Database className="h-3 w-3 text-brand-green" /> Supabase postgresql pooler</span>
               </div>
-
-              <div className="pt-2 text-center text-gray-600 border-t border-brand-border/40">
-                Crafted for 4Layers Integration
+              <div className="flex justify-between">
+                <span>Broker Protocol:</span>
+                <span className="text-white">MQTT v5.1.1 EMQX Client</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Broker Port:</span>
+                <span className="text-white">1883 TCP (Local)</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Device Provisioning:</span>
+                <span className="text-white">Bluetooth GATT OTA</span>
               </div>
             </div>
 
-          </section>
+            <div className="pt-2 text-center text-gray-600 border-t border-brand-border/40 uppercase tracking-widest text-[8px] font-bold">
+              Crafted for 4Layers Integration
+            </div>
+          </div>
 
-        </div>
+        </section>
+
+        {/* MIDDLE SECTION - REGISTERED DEIVCES (5 Columns) */}
+        <section className="lg:col-span-5 space-y-4">
+          <div className="flex justify-between items-center bg-brand-card border border-brand-border rounded-3xl px-5 py-4 shadow-xl">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-brand-green animate-ping" />
+              <h3 className="font-display font-bold text-xs uppercase tracking-wider text-white">
+                {rooms.find(r => r.id === selectedRoomId)?.name || 'All Spaces'} APPLIANCES
+              </h3>
+            </div>
+            
+            <button
+              id="register-appliance-btn"
+              onClick={() => setShowAddDeviceModal(true)}
+              className="px-3 py-1 bg-brand-green/10 hover:bg-brand-green text-brand-green hover:text-brand-dark border border-brand-green/30 hover:border-brand-green rounded-lg text-[10px] font-bold uppercase transition-all duration-200"
+            >
+              + Register Appliance
+            </button>
+          </div>
+
+          {/* ADD DEVICE MODAL CARD (Absolute Pop) */}
+          {showAddDeviceModal && (
+            <div className="bg-brand-card border border-brand-border rounded-3xl p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-2 border-b border-brand-border/40">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Sliders className="h-4 w-4 text-brand-green" /> Link New Appliance Node
+                </h3>
+                <button onClick={() => setShowAddDeviceModal(false)} className="text-gray-500 hover:text-white">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateDevice} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Appliance Name</label>
+                    <input 
+                      type="text" 
+                      value={newDevName}
+                      onChange={(e) => setNewDevName(e.target.value)}
+                      placeholder="e.g. Living Spotlight"
+                      className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-green"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Category Type</label>
+                    <select 
+                      value={newDevType}
+                      onChange={(e) => setNewDevType(e.target.value as any)}
+                      className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-green"
+                    >
+                      <option value="light">Lightbulb</option>
+                      <option value="fan">Ceiling Fan</option>
+                      <option value="ac">Air Conditioner</option>
+                      <option value="plug">Power Switch/Plug</option>
+                      <option value="tv">Television</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Parent Gateway Node</label>
+                    <select 
+                      value={newDevNode}
+                      onChange={(e) => setNewDevNode(e.target.value)}
+                      className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-green"
+                    >
+                      {nodes.map(n => (
+                        <option key={n.id} value={n.id}>{n.name} ({n.id})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Target Room Area</label>
+                    <select 
+                      value={newDevRoom}
+                      onChange={(e) => setNewDevRoom(e.target.value)}
+                      className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-green"
+                    >
+                      {rooms.filter(r => r.id !== 'room-all').map(r => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button 
+                    type="button"
+                    onClick={() => setShowAddDeviceModal(false)}
+                    className="px-4 py-2 border border-brand-border text-gray-400 font-bold text-xs rounded-lg uppercase hover:bg-brand-card-hover"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    className="px-4 py-2 bg-brand-green text-brand-dark font-bold text-xs rounded-lg uppercase hover:bg-brand-green/90"
+                  >
+                    Deploy Appliance
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* SMART DEVICES CARD CONTROLS GRID */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-200" id="devices-controls-grid">
+            {filteredDevices.length === 0 ? (
+              <div className="col-span-full bg-brand-card/30 border border-dashed border-brand-border rounded-xl p-8 text-center text-xs text-gray-500 font-mono">
+                No active smart appliances registered in this space. Click "Register Appliance" above.
+              </div>
+            ) : (
+              filteredDevices.map((device) => {
+                const associatedNode = nodes.find(n => n.id === device.nodeId);
+                const nodeStatus = associatedNode ? associatedNode.status : 'offline';
+
+                return (
+                  <DeviceControlCard
+                    key={device.id}
+                    device={device}
+                    nodeStatus={nodeStatus}
+                    onUpdateDevice={handleUpdateDevice}
+                  />
+                );
+              })
+            )}
+          </div>
+
+          {/* Quick workspace hints */}
+          <div className="bg-brand-card border border-brand-border rounded-3xl p-5 shadow-xl text-[10px] text-gray-500 font-mono flex items-center justify-between gap-2">
+            <span>
+              💡 Try toggling a Node offline in the <b>MQTT Nodes</b> table on the right. Online states instantly guard device relays!
+            </span>
+            <ArrowRight className="h-4 w-4 text-brand-green shrink-0" />
+          </div>
+        </section>
+
+        {/* RIGHT COLUMN - ANALYTICS & SCHEDULERS (4 Columns) */}
+        <section className="lg:col-span-4 space-y-4">
+          {/* Telemetry Chart Component */}
+          <PowerChart />
+
+          {/* BLE Node provisioner scanner */}
+          <BluetoothScanner 
+            existingRooms={rooms}
+            onNodeAdded={handleBleNodeAdded} 
+          />
+
+          {/* Automated Cron Scheduler */}
+          <ScheduleManager 
+            devices={devices}
+            schedules={schedules}
+            onAddSchedule={handleAddSchedule}
+            onDeleteSchedule={handleDeleteSchedule}
+            onToggleSchedule={handleToggleSchedule}
+          />
+
+          {/* MQTT Gateways Monitor */}
+          <NodeMonitor 
+            nodes={nodes}
+            existingRooms={rooms}
+            onRebootNode={(id) => addAlert(`Gateway node ${id} triggered remote reboot sequence.`, 'info')}
+            onToggleNodeStatus={handleToggleNodeStatus}
+            onAddCustomNode={handleAddCustomNode}
+          />
+        </section>
 
       </main>
 
