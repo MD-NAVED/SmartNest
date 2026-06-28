@@ -1,16 +1,46 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
 import { Text, TextInput, SegmentedButtons, Snackbar, useTheme, ActivityIndicator } from 'react-native-paper';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import apiClient from '../api/client';
 
 export default function AddDeviceScreen({ navigation }) {
   const theme = useTheme();
+  
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanning, setScanning] = useState(false);
   
   const [name, setName] = useState('');
   const [type, setType] = useState('light');
   const [nodeId, setNodeId] = useState('');
   const [loading, setLoading] = useState(false);
   const [setupLoading, setSetupLoading] = useState(true);
+
+  const startScanning = async () => {
+    if (!permission || !permission.granted) {
+      const res = await requestPermission();
+      if (!res.granted) {
+        Alert.alert('Permission Denied', 'Camera permission is required to scan QR codes.');
+        return;
+      }
+    }
+    setScanning(true);
+  };
+
+  const handleBarcodeScanned = ({ data }) => {
+    setScanning(false);
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.uuid) setNodeId(parsed.uuid);
+      if (parsed.name) setName(parsed.name);
+      if (parsed.type) setType(parsed.type);
+      Alert.alert('Scan Success', `Loaded device: ${parsed.name || parsed.uuid}`);
+    } catch (e) {
+      setNodeId(data);
+      Alert.alert('Scan Success', `Loaded Node ID: ${data}`);
+    }
+  };
 
   // Relational variables
   const [homeId, setHomeId] = useState(null);
@@ -129,6 +159,16 @@ export default function AddDeviceScreen({ navigation }) {
     >
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
         <View style={styles.formCard}>
+          {/* Scan QR Button */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={startScanning}
+            style={styles.qrScanBtn}
+          >
+            <MaterialCommunityIcons name="qrcode-scan" size={20} color="#0D0D0D" />
+            <Text style={styles.qrScanBtnText}>Scan Device QR Code</Text>
+          </TouchableOpacity>
+
           <Text style={styles.sectionLabel}>Node Name Identity</Text>
           <TextInput
             label="e.g. Corridor Light, Bed AC"
@@ -223,6 +263,34 @@ export default function AddDeviceScreen({ navigation }) {
           <Text style={{ color: '#FCA5A5', fontWeight: 'bold' }}>{errorMsg}</Text>
         </Snackbar>
       </ScrollView>
+
+      {/* Scanner Modal */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={scanning}
+        onRequestClose={() => setScanning(false)}
+      >
+        <View style={styles.scannerContainer}>
+          <CameraView
+            style={StyleSheet.absoluteFillObject}
+            onBarcodeScanned={handleBarcodeScanned}
+            barcodeScannerSettings={{
+              barcodeTypes: ['qr'],
+            }}
+          />
+          <View style={styles.scannerOverlay}>
+            <View style={styles.scannerCutout} />
+            <Text style={styles.scannerText}>Align QR Code within the frame</Text>
+            <TouchableOpacity
+              style={styles.closeScannerBtn}
+              onPress={() => setScanning(false)}
+            >
+              <Text style={styles.closeScannerText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -308,5 +376,57 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  qrScanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#22C55E',
+    borderRadius: 12,
+    paddingVertical: 12,
+    gap: 8,
+    marginBottom: 16,
+  },
+  qrScanBtnText: {
+    color: '#0D0D0D',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  scannerOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  scannerCutout: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
+    borderColor: '#22C55E',
+    borderRadius: 16,
+    backgroundColor: 'transparent',
+    marginBottom: 24,
+  },
+  scannerText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 32,
+  },
+  closeScannerBtn: {
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+  },
+  closeScannerText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

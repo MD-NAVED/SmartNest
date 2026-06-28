@@ -8,7 +8,8 @@ const TOKENS = {
   textSecondary: "#9CA3AF"
 };
 export default function DeviceCard({ device, onToggle, onIncrease, onDecrease }) {
-  const isEnabled = !!device.status;
+  // Ensure device.status is always a boolean to prevent accessibilityState null crashes
+  const isEnabled = device?.status === true || device?.status === 'ON';
   return <View style={[
     styles.card,
     isEnabled && styles.cardActive

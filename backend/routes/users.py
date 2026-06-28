@@ -66,3 +66,59 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
 def get_me(current_user: models.User = Depends(auth.get_current_user)):
     """Get profile information for the currently authenticated user."""
     return current_user
+
+@router.put("/me", response_model=schemas.UserResponse)
+def update_profile(
+    profile_data: schemas.UserUpdateProfile,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update current user's profile (email and/or username)."""
+    if profile_data.username:
+        # Check if new username is already taken by someone else
+        existing = db.query(models.User).filter(
+            models.User.username == profile_data.username,
+            models.User.id != current_user.id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already taken"
+            )
+        current_user.username = profile_data.username
+
+    if profile_data.email:
+        # Check if new email is already taken by someone else
+        existing = db.query(models.User).filter(
+            models.User.email == profile_data.email,
+            models.User.id != current_user.id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already taken"
+            )
+        current_user.email = profile_data.email
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+@router.post("/me/change-password", status_code=status.HTTP_200_OK)
+def change_password(
+    password_data: schemas.UserChangePassword,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Change current user's password."""
+    # Verify current password
+    if not auth.verify_password(password_data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+
+    # Update to new password
+    current_user.hashed_password = auth.get_password_hash(password_data.new_password)
+    db.commit()
+    return {"message": "Password changed successfully"}

@@ -22,6 +22,14 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
 
+class UserUpdateProfile(BaseModel):
+    email: Optional[EmailStr] = None
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
+
+class UserChangePassword(BaseModel):
+    current_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=6)
+
 
 # --- Home Schemas ---
 class HomeBase(BaseModel):
@@ -102,3 +110,52 @@ class DeviceHistoryResponse(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+class BulkDeviceControl(BaseModel):
+    device_ids: List[UUID]
+    state: Dict[str, Any]
+
+
+# --- Schedule Schemas ---
+class ScheduleBase(BaseModel):
+    device_id: UUID
+    action: str = Field(..., description="ON or OFF")
+    time: str = Field(..., description="HH:MM format")
+    days: str = Field(..., description="e.g. mon,tue,wed or daily")
+    enabled: bool = True
+
+class ScheduleCreate(ScheduleBase):
+    pass
+
+class ScheduleUpdate(BaseModel):
+    action: Optional[str] = None
+    time: Optional[str] = None
+    days: Optional[str] = None
+    enabled: Optional[bool] = None
+
+class ScheduleResponse(ScheduleBase):
+    id: UUID
+    user_id: UUID
+    created_at: datetime.datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+# --- Alert Schemas ---
+class AlertResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    device_id: Optional[UUID] = None
+    type: str
+    message: str
+    is_read: bool
+    created_at: datetime.datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+

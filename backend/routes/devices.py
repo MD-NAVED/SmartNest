@@ -180,3 +180,48 @@ def get_device_history(
     return db.query(models.DeviceHistory).filter(
         models.DeviceHistory.device_id == device_id
     ).order_by(models.DeviceHistory.timestamp.desc()).all()
+
+
+@router.post("/bulk-control", status_code=status.HTTP_200_OK)
+def bulk_control_devices(
+    control_data: schemas.BulkDeviceControl,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Control multiple devices at once.
+    Publishes MQTT control messages to their respective topics.
+    """
+    devices = db.query(models.Device).join(models.Home).filter(
+        models.Device.id.in_(control_data.device_ids),
+        models.Home.owner_id == current_user.id
+    ).all()
+
+    if not devices:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No valid devices found or access denied"
+        )
+
+    for device in devices:
+        previous_state = device.current_state or {}
+        requested_state = control_data.state
+
+        # Log "command_sent"
+        history_entry = models.DeviceHistory(
+            device_id=device.id,
+            change_type="command_sent",
+            previous_state=previous_state,
+            new_state=requested_state
+        )
+        db.add(history_entry)
+
+        # Publish MQTT message
+        mqtt.publish_control_message(
+            node_id=device.node_id,
+            state=requested_state
+        )
+
+    db.commit()
+    return {"detail": f"Bulk control commands sent to {len(devices)} devices."}
+

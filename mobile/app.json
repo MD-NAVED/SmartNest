@@ -13,8 +13,17 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.smartnest.app"
+      "package": "com.smartnest.app",
+      "permissions": ["CAMERA"]
     },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow SmartNest to access the camera to scan device QR codes."
+        }
+      ]
+    ],
     "web": {
       "bundler": "metro"
     },

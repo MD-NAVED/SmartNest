@@ -67,6 +67,7 @@ def on_message(client, userdata, msg):
                 
                 if device:
                     previous_state = device.current_state or {}
+                    was_offline = not device.is_online
                     
                     # Merge new state data into current_state
                     new_state = {**previous_state, **state_data}
@@ -86,14 +87,34 @@ def on_message(client, userdata, msg):
                             new_state=state_data
                         )
                         db.add(history_entry)
+
+                        if was_offline:
+                            alert_entry = models.Alert(
+                                user_id=device.home.owner_id,
+                                device_id=device.id,
+                                type="device_online",
+                                message=f"Smart Nest Device '{device.name}' is now ONLINE and connected to Gateway.",
+                                is_read=False
+                            )
+                            db.add(alert_entry)
+
                         db.commit()
                         logger.info("Device node %s status confirmed via MQTT: %s", node_id, state_data)
                     else:
                         # Keep online status active
-                        if not device.is_online:
+                        if was_offline:
                             device.is_online = True
                             device.updated_at = datetime.utcnow()
                             db.add(device)
+
+                            alert_entry = models.Alert(
+                                user_id=device.home.owner_id,
+                                device_id=device.id,
+                                type="device_online",
+                                message=f"Smart Nest Device '{device.name}' is now ONLINE and connected to Gateway.",
+                                is_read=False
+                            )
+                            db.add(alert_entry)
                             db.commit()
                         logger.info("Device node %s state is already up-to-date.", node_id)
                 else:

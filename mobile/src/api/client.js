@@ -5,11 +5,11 @@ import Constants from 'expo-constants';
 
 // Toggle local development vs production Render API
 // Set to true to connect the app to the backend server running locally on your computer.
-const USE_LOCAL_BACKEND = true; 
+const USE_LOCAL_BACKEND = false; // Set to true only for local dev 
 const LOCAL_PC_IP = '10.245.153.121'; // Your computer's network IP for phone/emulator connection
 
 let baseURL = USE_LOCAL_BACKEND
-  ? `http://${LOCAL_PC_IP}:8000`
+  ? (Platform.OS === 'web' ? 'http://localhost:8000' : `http://${LOCAL_PC_IP}:8000`)
   : 'https://smartnest-3jr4.onrender.com';
 
 console.log(`[SmartNest API Client] Initialized. Base URL: ${baseURL}`);

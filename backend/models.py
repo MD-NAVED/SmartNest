@@ -76,3 +76,34 @@ class DeviceHistory(Base):
 
     # Relationships
     device = relationship("Device", back_populates="history")
+
+
+class Schedule(Base):
+    __tablename__ = "schedules"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"), default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False)
+    action = Column(String, nullable=False)  # "ON" or "OFF"
+    time = Column(String, nullable=False)  # "HH:MM" (e.g. "08:30" or "22:00")
+    days = Column(String, nullable=False)  # CSV representation e.g. "mon,tue,wed" or "daily"
+    enabled = Column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, server_default=text("timezone('utc', now())"), nullable=False)
+
+    # Relationships
+    device = relationship("Device")
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"), default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+    type = Column(String, nullable=False)  # "device_offline", "device_online", "schedule_run", "info"
+    message = Column(String, nullable=False)
+    is_read = Column(Boolean, default=False, server_default=text("false"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, server_default=text("timezone('utc', now())"), nullable=False)
+
+    # Relationships
+    device = relationship("Device")

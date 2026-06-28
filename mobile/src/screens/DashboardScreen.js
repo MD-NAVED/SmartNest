@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   StatusBar
 } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import apiClient from "../api/client";
 import DeviceCard from "../components/DeviceCard";
 import EnergyChart from "../components/EnergyChart";
@@ -25,25 +26,15 @@ const TOKENS = {
   textSecondary: "#9CA3AF"
   // Muted Gray
 };
-const MOCK_DEVICES = [
-  { id: '1', name: 'Ambient Ceiling Light', room: 'living', type: 'light', status: true, value: 75 },
-  { id: '2', name: 'Entertainment LED', room: 'living', type: 'light', status: false, value: 30 },
-  { id: '3', name: 'Smart Thermostat', room: 'living', type: 'thermostat', status: true, value: 71 },
-  { id: '4', name: 'Kitchen Pendant Lights', room: 'kitchen', type: 'light', status: true, value: 90 },
-  { id: '5', name: 'Convection Smart Oven', room: 'kitchen', type: 'outlet', status: false, value: 0 },
-  { id: '6', name: 'Nightstand Lamp', room: 'bedroom', type: 'light', status: true, value: 40 },
-  { id: '7', name: 'Climate Control Unit', room: 'bedroom', type: 'thermostat', status: true, value: 68 },
-  { id: '8', name: 'Workstation Monitor Power', room: 'office', type: 'outlet', status: true, value: 120 },
-  { id: '9', name: 'Air Quality Purifier', room: 'office', type: 'outlet', status: false, value: 0 },
-];
-
-export default function DashboardScreen() {
-  const [selectedRoom, setSelectedRoom] = useState("living");
+export default function DashboardScreen({ navigation }) {
+  const [selectedRoom, setSelectedRoom] = useState("all");
   const [isArmed, setIsArmed] = useState(true);
   const [devices, setDevices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [roomMapping, setRoomMapping] = useState({});
+  const [dbRooms, setDbRooms] = useState([]);
+  const [unreadAlertsCount, setUnreadAlertsCount] = useState(0);
 
   const fetchRoomsMapping = async () => {
     try {
@@ -54,18 +45,25 @@ export default function DashboardScreen() {
         if (roomsRes.data && roomsRes.data.length > 0) {
           const mapping = {};
           roomsRes.data.forEach(r => {
-            const type = r.room_type || r.name.toLowerCase();
-            let mappedType = 'living';
-            if (type.includes('kitchen')) mappedType = 'kitchen';
-            else if (type.includes('bedroom')) mappedType = 'bedroom';
-            else if (type.includes('office') || type.includes('study') || type.includes('balcony')) mappedType = 'office';
-            mapping[r.id] = mappedType;
+            mapping[r.id] = r.name;
           });
           setRoomMapping(mapping);
+          setDbRooms(roomsRes.data);
+        } else {
+          setDbRooms([]);
         }
       }
     } catch (e) {
       console.warn("Failed to fetch room mapping:", e);
+    }
+  };
+
+  const fetchUnreadAlertsCount = async () => {
+    try {
+      const res = await apiClient.get('/api/alerts?unread_only=true');
+      setUnreadAlertsCount(res.data.length);
+    } catch (e) {
+      console.warn("Failed to fetch unread alerts count:", e);
     }
   };
 
@@ -85,12 +83,10 @@ export default function DashboardScreen() {
           else if (d.device_type === 'tv') mobileType = 'outlet';
           else if (d.device_type === 'plug') mobileType = 'outlet';
 
-          const mappedRoom = roomMapping[d.room_id] || 'living';
-
           return {
             id: d.id,
             name: d.name,
-            room: mappedRoom,
+            room_id: d.room_id,
             type: mobileType,
             status: d.current_state?.status === 'ON',
             value: d.current_state?.value !== undefined ? d.current_state.value : (d.device_type === 'ac' ? 72 : 50)
@@ -102,11 +98,8 @@ export default function DashboardScreen() {
         throw new Error("Returned telemetry data is not a valid list of devices");
       }
     } catch (error) {
-      console.warn("API fetch failed, utilizing sandbox simulation:", error);
+      console.warn("API fetch failed:", error);
       setHasError(true);
-      if (devices.length === 0) {
-        setDevices(MOCK_DEVICES);
-      }
     } finally {
       if (showLoading) {
         setIsLoading(false);
@@ -116,15 +109,26 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     fetchRoomsMapping();
+    fetchUnreadAlertsCount();
   }, []);
 
   useEffect(() => {
     fetchDevices(devices.length === 0);
     const intervalId = setInterval(() => {
       fetchDevices(false);
+      fetchUnreadAlertsCount();
     }, 10000);
     return () => clearInterval(intervalId);
   }, [roomMapping]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchRoomsMapping();
+      fetchDevices(true);
+      fetchUnreadAlertsCount();
+    });
+    return unsubscribe;
+  }, [navigation, roomMapping]);
 
   const handleToggleDevice = async (id) => {
     const target = devices.find((d) => d.id === id);
@@ -167,14 +171,36 @@ export default function DashboardScreen() {
     }
   };
 
-  const filteredDevices = devices.filter((device) => device.room === selectedRoom);
+  const handleBulkControl = async (turnOn) => {
+    const targetState = turnOn ? 'ON' : 'OFF';
+    const deviceIds = filteredDevices.map(d => d.id);
+
+    if (deviceIds.length === 0) return;
+
+    setDevices(prev => prev.map(d => deviceIds.includes(d.id) ? { ...d, status: turnOn } : d));
+
+    try {
+      await apiClient.post('/api/devices/bulk-control', {
+        device_ids: deviceIds,
+        state: { status: targetState }
+      });
+      fetchDevices(false);
+    } catch (err) {
+      console.warn("Failed bulk control operation:", err);
+      fetchDevices(true);
+    }
+  };
+
+  const filteredDevices = selectedRoom === "all"
+    ? devices
+    : devices.filter((device) => device.room_id === selectedRoom);
+
   const isSecurityArmed = !!isArmed;
   const ROOM_TABS = [
-    { id: "living", label: "Liv" },
-    { id: "kitchen", label: "Kit" },
-    { id: "bedroom", label: "Bed" },
-    { id: "office", label: "Off" }
+    { id: "all", label: "All" },
+    ...dbRooms.map((r) => ({ id: r.id, label: r.name }))
   ];
+
   return <SafeAreaView style={styles.safeContainer}>
       <StatusBar barStyle="light-content" backgroundColor={TOKENS.bg} />
       
@@ -186,11 +212,26 @@ export default function DashboardScreen() {
           <Text style={styles.headerSubtitle}>SYSTEM SECURITY ARMED</Text>
           <Text style={styles.headerTitle}>SmartNest Control</Text>
         </View>
-        <View style={styles.activeBadge}>
-          <View style={styles.activeDot} />
-          <Text style={styles.activeBadgeText}>
-            {devices.filter((d) => !!d.status).length} ACTIVE
-          </Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity 
+            style={styles.bellButton}
+            onPress={() => navigation.navigate("Alerts")}
+            accessibilityRole="button"
+            accessibilityLabel="System Notifications Center"
+          >
+            <MaterialCommunityIcons name="bell-outline" size={24} color={TOKENS.accent} />
+            {unreadAlertsCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadAlertsCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <View style={styles.activeBadge}>
+            <View style={styles.activeDot} />
+            <Text style={styles.activeBadgeText}>
+              {devices.filter((d) => !!d.status).length} ACTIVE
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -269,7 +310,13 @@ export default function DashboardScreen() {
         {
     /* Room Tabs Row */
   }
-        <Text style={styles.sectionHeader}>ROOM VIEWPORTS</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionHeader}>ROOM VIEWPORTS</Text>
+          <TouchableOpacity onPress={() => navigation.navigate("Rooms")} style={styles.manageLink}>
+            <MaterialCommunityIcons name="cog" size={14} color={TOKENS.accent} />
+            <Text style={styles.manageLinkText}>Manage</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.tabsRow}>
           {ROOM_TABS.map((tab) => {
     const isActive = selectedRoom === tab.id;
@@ -283,7 +330,7 @@ export default function DashboardScreen() {
       ]}
       accessibilityRole="tab"
       accessibilityState={isActive ? { selected: true } : void 0}
-      accessibilityLabel={`${tab.id} view filter`}
+      accessibilityLabel={`${tab.label} view filter`}
     >
                 <Text style={[
       styles.tabChipText,
@@ -294,6 +341,35 @@ export default function DashboardScreen() {
               </TouchableOpacity>;
   })}
         </View>
+
+        {/* Master Switch bulk control */}
+        {filteredDevices.length > 0 && (
+          <View style={styles.masterSwitchCard}>
+            <View style={styles.masterSwitchInfo}>
+              <MaterialCommunityIcons name="power" size={22} color={TOKENS.accent} />
+              <View style={styles.masterSwitchTextGroup}>
+                <Text style={styles.masterSwitchTitle}>Master Switch</Text>
+                <Text style={styles.masterSwitchSubtitle}>
+                  Turn all {selectedRoom === "all" ? "home" : "room"} devices ON or OFF
+                </Text>
+              </View>
+            </View>
+            <View style={styles.masterSwitchActions}>
+              <TouchableOpacity
+                style={[styles.bulkButton, styles.bulkButtonOff]}
+                onPress={() => handleBulkControl(false)}
+              >
+                <Text style={styles.bulkButtonTextOff}>ALL OFF</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.bulkButton, styles.bulkButtonOn]}
+                onPress={() => handleBulkControl(true)}
+              >
+                <Text style={styles.bulkButtonTextOn}>ALL ON</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {
     /* Connected Devices Grid with Fallbacks */
@@ -394,6 +470,16 @@ export default function DashboardScreen() {
           </View>}
 
       </ScrollView>
+      {/* Floating Action Button (FAB) to Add Device */}
+      <TouchableOpacity
+        style={styles.fab}
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate("AddDevice")}
+        accessibilityRole="button"
+        accessibilityLabel="Register New Appliance"
+      >
+        <MaterialCommunityIcons name="plus" size={28} color={TOKENS.bg} />
+      </TouchableOpacity>
     </SafeAreaView>;
 }
 const styles = StyleSheet.create({
@@ -771,5 +857,122 @@ const styles = StyleSheet.create({
     color: TOKENS.textSecondary,
     fontSize: 11,
     fontStyle: "italic"
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 18,
+    marginBottom: 8
+  },
+  manageLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4
+  },
+  manageLinkText: {
+    color: TOKENS.accent,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  masterSwitchCard: {
+    backgroundColor: TOKENS.surface,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: TOKENS.border,
+    marginBottom: 16,
+    flexDirection: "column",
+    gap: 12
+  },
+  masterSwitchInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
+  },
+  masterSwitchTextGroup: {
+    flex: 1
+  },
+  masterSwitchTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: TOKENS.textPrimary
+  },
+  masterSwitchSubtitle: {
+    fontSize: 11,
+    color: TOKENS.textSecondary,
+    marginTop: 2
+  },
+  masterSwitchActions: {
+    flexDirection: "row",
+    gap: 10
+  },
+  bulkButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1
+  },
+  bulkButtonOff: {
+    backgroundColor: "transparent",
+    borderColor: "#EF4444"
+  },
+  bulkButtonOn: {
+    backgroundColor: TOKENS.accent,
+    borderColor: TOKENS.accent
+  },
+  bulkButtonTextOff: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  bulkButtonTextOn: {
+    color: TOKENS.bg,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  fab: {
+    position: "absolute",
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: TOKENS.accent,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.5
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12
+  },
+  bellButton: {
+    position: "relative",
+    padding: 4
+  },
+  bellBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    backgroundColor: "#EF4444",
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4
+  },
+  bellBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900"
   }
 });

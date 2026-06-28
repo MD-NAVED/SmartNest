@@ -17,6 +17,10 @@ import RegisterScreen from '../screens/RegisterScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import AddDeviceScreen from '../screens/AddDeviceScreen';
 import HistoryScreen from '../screens/HistoryScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import RoomsScreen from '../screens/RoomsScreen';
+import SchedulesScreen from '../screens/SchedulesScreen';
+import AlertsScreen from '../screens/AlertsScreen';
 
 const AuthStack = createStackNavigator();
 const HomeStack = createStackNavigator();
@@ -43,6 +47,16 @@ function HomeStackScreen() {
         name="AddDevice" 
         component={AddDeviceScreen} 
         options={{ title: 'Add New Device' }} 
+      />
+      <HomeStack.Screen 
+        name="Rooms" 
+        component={RoomsScreen} 
+        options={{ title: 'Rooms' }} 
+      />
+      <HomeStack.Screen 
+        name="Alerts" 
+        component={AlertsScreen} 
+        options={{ title: 'Alerts' }} 
       />
     </HomeStack.Navigator>
   );
@@ -149,6 +163,10 @@ export default function AppNavigator() {
                   iconName = 'home-variant';
                 } else if (route.name === 'HistoryTab') {
                   iconName = 'clock-digital';
+                } else if (route.name === 'SchedulesTab') {
+                  iconName = 'calendar-clock';
+                } else if (route.name === 'SettingsTab') {
+                  iconName = 'cog';
                 }
                 return <MaterialCommunityIcons name={iconName} size={size + 2} color={color} />;
               },
@@ -174,15 +192,25 @@ export default function AppNavigator() {
               tabBarLabelStyle: { fontSize: 11, fontWeight: '700', marginTop: -2 },
             })}
           >
-            <Tab.Screen 
-              name="HomeTab" 
-              component={HomeStackScreen} 
-              options={{ title: 'Home', headerShown: false }} 
+            <Tab.Screen
+              name="HomeTab"
+              component={HomeStackScreen}
+              options={{ title: 'Home', headerShown: false }}
             />
-            <Tab.Screen 
-              name="HistoryTab" 
-              component={HistoryScreen} 
-              options={{ title: 'Event History' }} 
+            <Tab.Screen
+              name="HistoryTab"
+              component={HistoryScreen}
+              options={{ title: 'Event History' }}
+            />
+            <Tab.Screen
+              name="SchedulesTab"
+              component={SchedulesScreen}
+              options={{ title: 'Schedules' }}
+            />
+            <Tab.Screen
+              name="SettingsTab"
+              component={SettingsScreen}
+              options={{ title: 'Settings' }}
             />
           </Tab.Navigator>
         )}
