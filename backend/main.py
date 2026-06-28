@@ -32,7 +32,7 @@ app.include_router(rooms.router)
 app.include_router(schedules.router)
 app.include_router(alerts.router)
 
-scheduler = BackgroundScheduler()
+scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
 
 def check_schedules():
     db = SessionLocal()
