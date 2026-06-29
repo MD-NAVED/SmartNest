@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import engine, Base
-from backend.routes import users, devices, homes, rooms, schedules, alerts
+from backend.routes import users, devices, homes, rooms, schedules, alerts, history
 from backend import mqtt
 from apscheduler.schedulers.background import BackgroundScheduler
 import datetime
@@ -31,6 +31,7 @@ app.include_router(homes.router)
 app.include_router(rooms.router)
 app.include_router(schedules.router)
 app.include_router(alerts.router)
+app.include_router(history.router)
 
 scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
 

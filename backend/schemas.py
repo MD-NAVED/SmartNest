@@ -158,4 +158,16 @@ class AlertResponse(BaseModel):
     }
 
 
+# --- Event History Schemas ---
+class EventHistoryResponse(BaseModel):
+    id: UUID
+    device_id: UUID
+    device_name: str
+    change_type: str
+    previous_state: Optional[Dict[str, Any]] = None
+    new_state: Dict[str, Any]
+    timestamp: datetime.datetime
 
+    model_config = {
+        "from_attributes": True
+    }

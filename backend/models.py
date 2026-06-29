@@ -77,6 +77,10 @@ class DeviceHistory(Base):
     # Relationships
     device = relationship("Device", back_populates="history")
 
+    @property
+    def device_name(self) -> str:
+        return self.device.name if self.device else "Unknown Device"
+
 
 class Schedule(Base):
     __tablename__ = "schedules"

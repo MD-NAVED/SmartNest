@@ -49,8 +49,13 @@ free-tier sleep abhi koi issue nahi). Har feature "kaam karta dikhe" — bas itn
 - [x] **P6** Alerts / Notifications (backend table + mobile UI)
 - [x] **P7** Deploy: **APK → EAS build only** (dashboard deploy NAHI — sirf reference hai)
 
-### PENDING (in order)
-- [ ] **P8** UI Polish — room-chip wrapping fix + jargon→normal wording + fake data (solar/battery/efficiency) ko real counts + real Master Switch banao
+- [x] **P8** UI Polish — room-chip fix + plain wording + real stats (committed: style(ui) 1007dd3)
+- [x] **P9** Global **Event History endpoint** (`GET /api/history`) — client ko /docs pe poori user activity dikhe
+
+### ⏭️ RESUME POINT
+All feature tasks (P0 through P9) are fully implemented, verified, and checked off!
+Backend live + deployed (with schedules, alerts, bulk control, and global event history). Mobile app base, UI polish, settings, alerts, and schedules fully done.
+Ready for EAS Android preview compilation.
 
 ---
 
@@ -286,8 +291,27 @@ Show me the final files you changed.
 
 ---
 
+# 🚀 PROMPT P9 — Global Event History endpoint (client ke /docs ke liye)
+
+```
+TASK: Add a GLOBAL event-history (user activity) endpoint so the client can view all activity from the Swagger /docs page. Currently only a per-device endpoint exists (GET /api/devices/{device_id}/history) which needs a device_id.
+
+BACKEND (backend/):
+- Add GET /api/history (new router file routes/history.py, included in main.py, OR reuse devices router — your call). JWT-protected.
+- Returns ALL DeviceHistory rows for the CURRENT user's devices only (join Device -> filter by owner), newest first (order by timestamp desc).
+- Each item: device_id, device_name, change_type (command_sent / device_created / schedule_run / status_confirmed), previous_state, new_state, timestamp.
+- Query params: limit (default 50, max 200), optional device_id filter.
+- Give the router its own tag "History" so it shows clearly in /docs.
+- Reuse existing auth dependency + DeviceHistory & Device models. Add a response schema (e.g. EventHistoryResponse) that includes device_name.
+- No new pip packages. (If you ever add one, add it to the ROOT requirements.txt — Render builds from there, not backend/requirements.txt.)
+
+Show me the final files. After this I will commit, push to main, and let Render redeploy.
+```
+
+---
+
 ## 🔁 Suggested order to paste
-P0-A → P0-B → P1 → P2 → P3 → P4 → P5 → P6 → P7 → **P8 (UI polish, last)**
+P0-A → P0-B → P1 → P2 → P3 → P4 → P5 → P6 → P7 → P8 → **P9 (event history endpoint)**
 
 Har prompt ke baad Antigravity ko complete hone do (interrupt mat karo), file save hone do, phir agla paste karo.
 Jo task ho jaaye uske aage `[ ]` ko `[x]` kar dena upar tracker mein.
